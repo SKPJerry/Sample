@@ -1,0 +1,107 @@
+name: Create GitHub Repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        description: 'Repository name'
+        required: true
+        type: string
+      description:
+        description: 'Repository description'
+        required: false
+        type: string
+      visibility:
+        description: 'Repository visibility'
+        required: true
+        type: choice
+        options:
+          - public
+          - private
+      auto_init:
+        description: 'Initialize with README'
+        required: false
+        type: boolean
+        default: true
+      port_context:
+        description: 'Port context (automatically passed)'
+        required: false
+        type: string
+
+jobs:
+  create-repository:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inform Port of workflow start
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).runId }}
+          logMessage: |
+            Creating GitHub repository: ${{ inputs.repo_name }} 🚀
+
+      - name: Create GitHub Repository
+        id: create_repo
+        run: |
+          RESPONSE=$(curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GH_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/orgs/${{ secrets.GH_ORG }}/repos \
+            -d '{
+              "name": "${{ inputs.repo_name }}",
+              "description": "${{ inputs.description }}",
+              "private": ${{ inputs.visibility == 'private' }},
+              "auto_init": ${{ inputs.auto_init }}
+            }')
+          
+          echo "Response: $RESPONSE"
+          
+          # Extract repository details
+          REPO_URL=$(echo $RESPONSE | jq -r '.html_url')
+          REPO_ID=$(echo $RESPONSE | jq -r '.id')
+          DEFAULT_BRANCH=$(echo $RESPONSE | jq -r '.default_branch')
+          
+          echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
+          echo "repo_id=$REPO_ID" >> $GITHUB_OUTPUT
+          echo "default_branch=$DEFAULT_BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Create Port Entity
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: UPSERT
+          identifier: ${{ inputs.repo_name }}
+          blueprint: githubRepository
+          properties: |
+            {
+              "url": "${{ steps.create_repo.outputs.repo_url }}",
+              "description": "${{ inputs.description }}",
+              "visibility": "${{ inputs.visibility }}",
+              "defaultBranch": "${{ steps.create_repo.outputs.default_branch }}"
+            }
+
+      - name: Inform Port of completion
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).runId }}
+          logMessage: |
+            ✅ Repository created successfully!
+            🔗 URL: ${{ steps.create_repo.outputs.repo_url }}
+
+      - name: Inform Port of failure
+        if: failure()
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).runId }}
+          logMessage: |
+            ❌ Failed to create repository
