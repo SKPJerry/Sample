@@ -18,11 +18,6 @@ on:
         options:
           - public
           - private
-      auto_init:
-        description: 'Initialize with README'
-        required: false
-        type: boolean
-        default: true
       port_context:
         description: 'Port context (automatically passed)'
         required: false
@@ -53,8 +48,7 @@ jobs:
             -d '{
               "name": "${{ inputs.repo_name }}",
               "description": "${{ inputs.description }}",
-              "private": ${{ inputs.visibility == 'private' }},
-              "auto_init": ${{ inputs.auto_init }}
+              "private": ${{ inputs.visibility == 'private' }}
             }')
           
           echo "Response: $RESPONSE"
