@@ -6,7 +6,7 @@ on:
       repo_name:
         description: "Name of the new repository"
         required: true
-      port_run_id:
+      run_id:
         description: "Port runId (passed from Port)"
         required: true
 
@@ -44,7 +44,7 @@ jobs:
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           baseUrl: https://api.getport.io
           operation: PATCH_RUN
-          runId: ${{ github.event.inputs.port_run_id }}
+          runId: ${{ github.event.inputs.run_id }}
           status: "SUCCESS"
           logMessage: |
             Repository ${{ github.event.inputs.repo_name }} created successfully.
@@ -58,7 +58,7 @@ jobs:
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           baseUrl: https://api.getport.io
           operation: PATCH_RUN
-          runId: ${{ github.event.inputs.port_run_id }}
+          runId: ${{ github.event.inputs.run_id }}
           status: "FAILURE"
           logMessage: |
             Failed to create repository ${{ github.event.inputs.repo_name }}.
