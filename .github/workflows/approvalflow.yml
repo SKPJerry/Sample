@@ -9,7 +9,7 @@ on:
       repo_name:
         required: true
         type: string
-      port_run_id:
+      run_id:
         required: false
         type: string
 
@@ -75,7 +75,7 @@ jobs:
           fi
 
       - name: Report to Port
-        if: always() && inputs.port_run_id != ''
+        if: always() && inputs.run_id != ''
         run: |
           echo "📊 Reporting status to Port..."
 
