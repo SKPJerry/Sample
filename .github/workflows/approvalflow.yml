@@ -9,8 +9,8 @@ on:
       repo_name:
         required: true
         type: string
-      run_id:
-        required: false
+      port_run_id:
+        required: true
         type: string
 
 jobs:
@@ -75,7 +75,7 @@ jobs:
           fi
 
       - name: Report to Port
-        if: always() && inputs.run_id != ''
+        if: always() && inputs.port_run_id != ''
         run: |
           echo "📊 Reporting status to Port..."
 
@@ -105,5 +105,5 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"status\":\"$STATUS\",\"message\":\"$MSG\"}" \
-            "https://api.getport.io/v1/actions/runs/${{ inputs.run_id }}"
+            "https://api.getport.io/v1/actions/runs/${{ inputs.port_run_id }}"
  
