@@ -1,0 +1,109 @@
+name: Create Repo with Jira Approval
+
+on:
+  workflow_dispatch:
+    inputs:
+      jira_issue_key:
+        required: true
+        type: string
+      repo_name:
+        required: true
+        type: string
+      port_run_id:
+        required: false
+        type: string
+
+jobs:
+  wait-and-create:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Jira Approval
+        id: wait
+        run: |
+          for i in {1..60}; do
+            STATUS=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+              "${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue/${{ inputs.jira_issue_key }}" \
+              | jq -r '.fields.status.name')
+
+            echo "Check $i: Status = $STATUS"
+
+            # Approved - create repo
+            if [[ "$STATUS" == "Done" ]]; then
+              echo "✅ Jira ticket approved (Status: DONE)"
+              echo "approved=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            # Rejected - stop without creating
+            if [[ "$STATUS" == "Rejected" ]] || [[ "$STATUS" == "Cancelled" ]]; then
+              echo "❌ Jira ticket rejected (Status: $STATUS)"
+              echo "approved=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            # Still waiting (TO DO, In Progress, IN REVIEW)
+            if [[ "$STATUS" == "TO DO" ]] || [[ "$STATUS" == "In Progress" ]] || [[ "$STATUS" == "IN REVIEW" ]]; then
+              echo "⏳ Still waiting for approval (Status: $STATUS)"
+            fi
+
+            sleep 30
+          done
+
+          echo "⏱️ Timeout - no decision after 30 minutes"
+          echo "approved=timeout" >> $GITHUB_OUTPUT
+          exit 1
+
+      - name: Create Repo
+        if: steps.wait.outputs.approved == 'true'
+        run: |
+          echo "🚀 Creating repository: ${{ inputs.repo_name }}"
+
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/orgs/abiolaemma2026/repos \
+            -d "{\"name\":\"${{ inputs.repo_name }}\",\"private\":false,\"auto_init\":true}")
+
+          if echo "$RESPONSE" | jq -e '.html_url' > /dev/null 2>&1; then
+            REPO_URL=$(echo "$RESPONSE" | jq -r '.html_url')
+            echo "✅ Repository created: $REPO_URL"
+            echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to create repository"
+            echo "$RESPONSE" | jq .
+            exit 1
+          fi
+
+      - name: Report to Port
+        if: always() && inputs.port_run_id != ''
+        run: |
+          echo "📊 Reporting status to Port..."
+
+          TOKEN=$(curl -s -X POST https://api.getport.io/v1/auth/access_token \
+            -H "Content-Type: application/json" \
+            -d '{"clientId":"${{ secrets.PORT_CLIENT_ID }}","clientSecret":"${{ secrets.PORT_CLIENT_SECRET }}"}' \
+            | jq -r '.accessToken')
+
+          if [ "${{ steps.wait.outputs.approved }}" == "true" ]; then
+            MSG="✅ Jira approved (DONE) - Repository created successfully"
+            STATUS="SUCCESS"
+          elif [ "${{ steps.wait.outputs.approved }}" == "false" ]; then
+            MSG="❌ Jira ticket rejected - Repository not created"
+            STATUS="FAILURE"
+          elif [ "${{ steps.wait.outputs.approved }}" == "timeout" ]; then
+            MSG="⏱️ Timeout - No approval decision after 30 minutes"
+            STATUS="FAILURE"
+          else
+            MSG="❌ Workflow failed"
+            STATUS="FAILURE"
+          fi
+
+          echo "Status: $STATUS"
+          echo "Message: $MSG"
+
+          curl -X PATCH \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"status\":\"$STATUS\",\"message\":\"$MSG\"}" \
+            "https://api.getport.io/v1/actions/runs/${{ inputs.port_run_id }}"
+ 
