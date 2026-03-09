@@ -105,5 +105,5 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"status\":\"$STATUS\",\"message\":\"$MSG\"}" \
-            "https://api.getport.io/v1/actions/runs/${{ inputs.port_run_id }}"
+            "https://api.getport.io/v1/actions/runs/${{ inputs.run_id }}"
  
